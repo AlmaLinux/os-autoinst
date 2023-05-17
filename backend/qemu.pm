@@ -746,6 +746,7 @@ sub start_qemu ($self) {
     $arch = 'arm' if ($arch =~ /armv6|armv7/);
     my $is_arm = $arch eq 'aarch64' || $arch eq 'arm';
     my $is_s390x = $arch eq 's390x';
+    my $is_ppc64le = $arch eq 'ppc64le';
 
     $self->_set_graphics_backend($is_arm);
 
@@ -762,7 +763,10 @@ sub start_qemu ($self) {
         $arch_supports_boot_order = 0;
         $use_virtio_kbd = 1;
     }
-    elsif ($vars->{OFW}) {
+    elsif ($is_ppc64le) {
+        $use_virtio_kbd = 1;
+    }
+    elsif ($vars->{OFW} && !$is_ppc64le) {
         $use_usb_kbd = $self->qemu_params_ofw;
     }
 
@@ -851,7 +855,7 @@ sub start_qemu ($self) {
     sp('chardev', 'ringbuf,id=serial0,logfile=serial0,logappend=on');
     sp('serial', 'chardev:serial0');
 
-    if (!$is_s390x) {
+    if (!$is_s390x && !$is_arm && !$is_ppc64le) {
         if ($self->requires_audiodev) {
             my $audiodev = $vars->{QEMU_AUDIODEV} // 'intel-hda';
             my $audiobackend = $vars->{QEMU_AUDIOBACKEND} // 'none';
@@ -952,8 +956,8 @@ sub start_qemu ($self) {
         }
 
         unless ($vars->{QEMU_NO_TABLET}) {
-            sp('device', ($vars->{OFW} || $arch eq 'aarch64') ? 'nec-usb-xhci' : $is_s390x ? 'virtio-tablet' : 'qemu-xhci');
-            sp('device', 'usb-tablet') unless $is_s390x;
+            sp('device', ($vars->{OFW} && !$is_arm && !$is_ppc64le) ? 'nec-usb-xhci' : ($is_s390x || $is_ppc64le) ? 'virtio-tablet' : 'qemu-xhci');
+            sp('device', 'usb-tablet') unless ($is_s390x || $is_ppc64le);
         }
 
         sp('device', 'usb-kbd') if $use_usb_kbd;
